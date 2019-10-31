@@ -249,15 +249,13 @@ void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNod
     if (strcmp1(lakon[0], "C3D20RL")==0){
         numPatch=6;
         offset=20;
-	    //int index[6][3] = { { 0,4,7 }, { 1,4,5 }, { 2,5,6 }, { 3,6,7 } , { 4,5,7 }, { 5,6,7 }};
-        //faceindex=index;
     }
-    else if (strcmp1(lakon[0], "C3D8RL")==0){
-        numPatch=2;
-        offset=8;
-	    //int index[2][3]= { { 0,1,2 }, { 2,3,0 }};
-        //faceindex=index;
-    }
+    //else if (strcmp1(lakon[0], "C3D8RL")==0){
+    //    numPatch=2;
+    //    offset=8;
+	//    //int index[2][3]= { { 0,1,2 }, { 2,3,0 }};
+    //    //faceindex=index;
+    //}
     else
        //TODO add an error reason
         exit( EXIT_FAILURE );

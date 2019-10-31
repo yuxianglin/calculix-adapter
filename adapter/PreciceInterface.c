@@ -418,17 +418,36 @@ void PreciceInterface_ConfigureNodesMesh( PreciceInterface * interface, Simulati
 void PreciceInterface_NodeConnectivity( PreciceInterface * interface, SimulationData * sim )
 {
 	int numElements;
-	char * faceSetName = toFaceSetName( interface->name );
-	interface->faceSetID = getSetID( faceSetName, sim->set, sim->nset );
-	numElements = getNumSetElements( interface->faceSetID, sim->istartset, sim->iendset );
-	interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
-	interface->elementIDs = malloc( numElements * sizeof( ITG ) );
-	interface->faceIDs = malloc( numElements * sizeof( ITG ) );
-	interface->faceCenterCoordinates = malloc( numElements * 3 * sizeof( double ) );
-	getSurfaceElementsAndFaces( interface->faceSetID, sim->ialset, sim->istartset, sim->iendset, interface->elementIDs, interface->faceIDs );
-	interface->numElements = numElements;
-	interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
-	PreciceInterface_ConfigureTetraFaces( interface, sim );
+    //if (strcmp1(sim->lakon, "C3D4")==0 || strcmp1(sim->lakon, "C3D10")==0)
+    if (strcmp1(sim->lakon[0], "C3D4")==0)
+    {
+	    char * faceSetName = toFaceSetName( interface->name );
+	    interface->faceSetID = getSetID( faceSetName, sim->set, sim->nset );
+	    numElements = getNumSetElements( interface->faceSetID, sim->istartset, sim->iendset );
+	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
+	    interface->elementIDs = malloc( numElements * sizeof( ITG ) );
+	    interface->faceIDs = malloc( numElements * sizeof( ITG ) );
+	    interface->faceCenterCoordinates = malloc( numElements * 3 * sizeof( double ) );
+	    getSurfaceElementsAndFaces( interface->faceSetID, sim->ialset, sim->istartset, sim->iendset, interface->elementIDs, interface->faceIDs );
+	    interface->numElements = numElements;
+	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
+	    PreciceInterface_ConfigureTetraFaces( interface, sim );
+    }
+    else if (strcmp1(sim->lakon[0], "C3D20RL")==0)
+    {
+        char * faceSetName = toElementSetName( interface->name );
+	    interface->faceSetID = getSetID( faceSetName, sim->set, sim->nset );
+	    numElements = getNumSetElements( interface->faceSetID, sim->istartset, sim->iendset );
+	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
+	    interface->elementIDs = malloc( numElements * sizeof( ITG ) );
+	    //interface->faceIDs = malloc( numElements * sizeof( ITG ) );
+	    interface->faceCenterCoordinates = malloc( numElements * 3 * sizeof( double ) );
+	    getSurfaceElements( interface->faceSetID, sim->ialset, sim->istartset, sim->iendset, interface->elementIDs);
+	    interface->numElements = numElements;
+	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
+	    PreciceInterface_ConfigureTetraFaces( interface, sim );
+
+    }
 }
 
 void PreciceInterface_EnsureValidNodesMeshID( PreciceInterface * interface )
@@ -444,13 +463,21 @@ void PreciceInterface_EnsureValidNodesMeshID( PreciceInterface * interface )
 void PreciceInterface_ConfigureTetraFaces( PreciceInterface * interface, SimulationData * sim )
 {
 	int i;
+    int numPatch;
 	printf("Setting node connectivity for nearest projection mapping: \n");
 	if( interface->nodesMeshName != NULL )
 	{	
-		interface->triangles = malloc( interface->numElements * 3 * sizeof( ITG ) );
-		getTetraFaceNodes( interface->elementIDs, interface->faceIDs,  interface->nodeIDs, interface->numElements, interface->numNodes, sim->kon, sim->ipkon, interface->triangles );
-
-		for( i = 0 ; i < interface->numElements ; i++ )
+        if (strcmp1(sim->lakon[0], "C3D4")==0){
+            numPatch=1;
+		    interface->triangles = malloc( interface->numElements * 3 *numPatch * sizeof( ITG ) );
+		    getTetraFaceNodes( interface->elementIDs, interface->faceIDs,  interface->nodeIDs, interface->numElements, interface->numNodes, sim->kon, sim->ipkon, interface->triangles );
+        }
+        else if (strcmp1(sim->lakon[0], "C3D20RL")==0){
+            numPatch=6;
+		    interface->triangles = malloc( interface->numElements * 3 *numPatch * sizeof( ITG ) );
+		    getShellFaceNodes( interface->elementIDs,  interface->nodeIDs, interface->numElements, interface->numNodes, sim->kon, sim->ipkon, sim->lakon, interface->triangles );
+        }
+		for( i = 0 ; i < interface->numElements*numPatch; i++ )
 		{
 			precicec_setMeshTriangleWithEdges( interface->nodesMeshID, interface->triangles[3*i], interface->triangles[3*i+1], interface->triangles[3*i+2] );
 		}

@@ -24,14 +24,22 @@ char* toFaceSetName( char * name )
 	return concat( prefix, name, suffix );
 }
 
+char* toElementSetName( char * name )
+{
+	char * prefix = "E";
+	char * suffix = "E";
+	return concat( prefix, name, suffix );
+}
 ITG getSetID( char * setName, char * set, ITG nset )
 {
 
 	ITG i;
 	ITG nameLength = 81;
-
 	for( i = 0 ; i < nset ; i++ )
 	{
+        //printf("i is %i \n", i);
+        //printf("Set is %s \n",&set[i * nameLength]);
+        //printf("Set name is %s \n",setName);
 		if( strcmp1( &set[i * nameLength], setName ) == 0 )
 		{
 			printf("Set ID Found \n");
@@ -55,9 +63,22 @@ ITG getSetID( char * setName, char * set, ITG nset )
 
 ITG getNumSetElements( ITG setID, ITG * istartset, ITG * iendset )
 {
+    //printf("the istartset is %i\n",istartset[setID]);
+    //printf("the iendset is %i\n",iendset[setID]);
 	return iendset[setID] - istartset[setID] + 1;
 }
 
+void getSurfaceElements( ITG setID, ITG * ialset, ITG * istartset, ITG * iendset, ITG * elements)
+{
+
+	ITG i, k = 0;
+
+	for( i = istartset[setID]-1 ; i < iendset[setID] ; i++ )
+	{
+		elements[k] = ialset[i];
+		k++;
+	}
+}
 void getSurfaceElementsAndFaces( ITG setID, ITG * ialset, ITG * istartset, ITG * iendset, ITG * elements, ITG * faces )
 {
 
@@ -67,6 +88,12 @@ void getSurfaceElementsAndFaces( ITG setID, ITG * ialset, ITG * istartset, ITG *
 	{
 		elements[k] = ialset[i] / 10;
 		faces[k] = ialset[i] % 10;
+        //printf("the istartset is %i\n",istartset[setID]);
+        //printf("the iendset is %i\n",iendset[setID]);
+        //printf("the ialset is %i\n",ialset[i]);
+        //printf("the element is %i\n", elements[k]);
+        //printf("the face is %i\n", faces[k]);
+        //printf("the k is %i\n", k);
 		k++;
 	}
 }
@@ -80,7 +107,10 @@ void getNodeCoordinates( ITG * nodes, ITG numNodes, int dim, double * co, double
 	{
 		int nodeIdx = nodes[i] - 1;
 		//The displacements are added to the coordinates such that in case of a simulation restart the displaced coordinates are used for initializing the coupling interface instead of the initial coordinates
-		for( j = 0 ; j < dim ; j++ ) coordinates[i * dim + j] = co[nodeIdx * 3 + j] + v[nodeIdx * mt + j + 1];
+		for( j = 0 ; j < dim ; j++ ){
+            coordinates[i * dim + j] = co[nodeIdx * 3 + j] + v[nodeIdx * mt + j + 1];
+            //printf("dimension: %i, #node: %i, direction: %i coordinate: %f\n", dim, i, j, coordinates[i * dim + j]);
+        }
 	}
 }
 
@@ -189,7 +219,13 @@ void getTetraFaceCenters( ITG * elements, ITG * faces, ITG numElements, ITG * ko
 
 	
 }
-
+//void getTetraFaceCenters( ITG * elements, ITG * faces, ITG numElements, ITG * kon, ITG * ipkon, double * co, double * faceCenters, ITG * preciceFaceCenterIDs )
+//{
+//
+//
+//
+//
+//}
 /*
    void getSurfaceGaussPoints(int setID, ITG * co, ITG istartset, ITG iendset, ITG * ipkon, ITG * lakon, ITG * kon, ITG * ialset, double * coords) {
 
@@ -198,6 +234,55 @@ void getTetraFaceCenters( ITG * elements, ITG * faces, ITG numElements, ITG * ko
 
    }
  */
+void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNodes, ITG * kon, ITG * ipkon,ITG * lakon, int * shellFaceNodes )
+{
+
+	// Node numbering for faces of tetrahedral elements (in the documentation the number is + 1)
+
+	ITG i, j, k;
+    ITG numPatch;	
+    ITG offset;	
+    //int **faceindex;
+	int faceindex[6][3] = { { 0,4,7 }, { 1,4,5 }, { 2,5,6 }, { 3,6,7 } , { 4,5,7 }, { 5,6,7 }};
+
+        
+    if (strcmp1(lakon[0], "C3D20RL")==0){
+        numPatch=6;
+        offset=20;
+	    //int index[6][3] = { { 0,4,7 }, { 1,4,5 }, { 2,5,6 }, { 3,6,7 } , { 4,5,7 }, { 5,6,7 }};
+        //faceindex=index;
+    }
+    else if (strcmp1(lakon[0], "C3D8RL")==0){
+        numPatch=2;
+        offset=8;
+	    //int index[2][3]= { { 0,1,2 }, { 2,3,0 }};
+        //faceindex=index;
+    }
+    else
+       //TODO add an error reason
+        exit( EXIT_FAILURE );
+	for( i = 0 ; i < numPatch*numElements ; i++ )
+	{
+        ITG elementIdx = i/numPatch;
+        ITG localPatch= i%numPatch;
+		for( j = 0 ; j < 3; j++ )
+		{
+            //printf("i=%i, j=%i, localpatch=%i\n",i, j, localPatch);        
+            //printf("faceidex[i, j]=%i\n",faceindex[localPatch][j]);        
+			ITG nodeID = kon[ipkon[elementIdx]+offset+faceindex[localPatch][j]];
+			//ITG nodeID = kon[ipkon[elementIdx]+offset+*faceindex[localPatch*3+j]];
+            //TODO
+			for( k = 0 ; k < numNodes ; k++ )
+			{
+				if( nodes[k] == nodeID ){
+					shellFaceNodes[i*3 + j] = k;
+                    //printf("i is %i, j is %i, k is %i\n", i, j, k);
+                }
+			}
+		}
+	}
+}
+
 
 
 void getTetraFaceNodes( ITG * elements, ITG * faces, ITG * nodes, ITG numElements, ITG numNodes, ITG * kon, ITG * ipkon, int * tetraFaceNodes )
@@ -444,6 +529,7 @@ void setNodeForces( ITG * nodes, double * forces, ITG numNodes, int dim, int * x
 	{
 		int nodeIdx = nodes[i] - 1;
 		for( j = 0 ; j < dim ; j++ ) xforc[xforcIndices[3 * i + j]] = forces[dim * i + j];
+        //printf("force: %f\n", forces[dim * i + j]);
 	}
 }
 

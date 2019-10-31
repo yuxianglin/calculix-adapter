@@ -2,13 +2,13 @@
 # https://github.com/precice/calculix-adapter/wiki/Installation-instructions-for-CalculiX
 # Set the following variables before building:
 # Path to original CalculiX source (e.g. $(HOME)/ccx_2.15/src )
-CCX             = $(HOME)/PathTo/CalculiX/ccx_2.15/src
+CCX             = /workspace/Yuxiang/src/CalculiX/CalculiX/ccx_2.15/src
 # Path to SPOOLES main directory (e.g. $(HOME)/SPOOLES.2.2 )
-SPOOLES         = $(HOME)/PathTo/SPOOLES
+SPOOLES         = /workspace/Yuxiang/src/SPOOLES.2.2
 # Path to ARPACK main directory (e.g. $(HOME)/ARPACK )
-ARPACK          = $(HOME)/PathTo/ARPACK
+ARPACK          = /workspace/Yuxiang/src/ARPACK
 # Path to yaml-cpp prefix (e.g. $(HOME)/yaml-cpp, should contain "include" and "build")
-YAML            = $(HOME)/PathTo/yaml-cpp
+YAML            = /workspace/Yuxiang/src/yaml-cpp-yaml-cpp-0.6.2
 
 # Get the CFLAGS and LIBS from pkg-config (preCICE version >= 1.4.0).
 # If pkg-config cannot find the libprecice.pc meta-file, you may need to set the

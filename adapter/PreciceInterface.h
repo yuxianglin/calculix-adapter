@@ -264,6 +264,12 @@ void PreciceInterface_EnsureValidNodesMeshID( PreciceInterface * interface );
  */
 void PreciceInterface_ConfigureTetraFaces( PreciceInterface * interface, SimulationData * sim );
 
+
+
+void PreciceInterface_ConfigureShellFaces( PreciceInterface * interface, SimulationData * sim );
+
+
+
 /**
  * @brief Configures the node connectivity for nearest-projection mapping
  * @param interface

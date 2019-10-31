@@ -59,6 +59,12 @@ char* toFaceSetName( char * name );
  * @param set: CalculiX array for all the set names
  * @param nset: CalculiX variable for the number of sets
  */
+
+char* toElementSetName( char * name );
+
+
+
+
 ITG getSetID( char * setName, char * set, ITG nset );
 
 /**
@@ -157,6 +163,8 @@ void getTetraFaceCenters( ITG * elements, ITG * faces, ITG numElements, ITG * ko
  */
 void getTetraFaceNodes( ITG * elements, ITG * faces, ITG * nodes, ITG numElements, ITG numNodes, ITG * kon, ITG * ipkon, int * tetraFaceNodes );
 
+void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNodes, ITG * kon, ITG * ipkon,ITG * lakon, int * shellFaceNodes );
+void getSurfaceElements( ITG setID, ITG * ialset, ITG * istartset, ITG * iendset, ITG * elements);
 /**
  * @brief Gets the indices of the xload where the DFLUX and FILM boundary conditions must be applied
  * @param loadType: DFLUX or FILM
@@ -168,6 +176,7 @@ void getTetraFaceNodes( ITG * elements, ITG * faces, ITG * nodes, ITG numElement
  * @param sideload: CalculiX array containing the faces to which the DFLUX or FILM boundary conditions are applied
  * @param xloadIndices: output list of indices of the xload array
  */
+
 void getXloadIndices( char * loadType, ITG * elementIDs, ITG * faceIDs, ITG numElements, ITG nload, ITG * nelemload, char * sideload, ITG * xloadIndices );
 
 /**

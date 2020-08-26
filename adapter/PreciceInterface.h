@@ -59,11 +59,13 @@ typedef struct PreciceInterface {
 	int displacementsDataID; //New data ID for displacements
 	int displacementDeltasDataID; //New data ID for displacementDeltas
 	int forcesDataID; //New data ID for forces
+	int pressureDataID; //New data ID for pressure
 
 	// Indices that indicate where to apply the boundary conditions / forces
 	int * xloadIndices;
 	int * xbounIndices;
 	int * xforcIndices;
+    int *pressureNodeIndex;
 
 	// Mapping type if nearest-projection mapping
 	int mapNPType;
@@ -113,10 +115,14 @@ typedef struct SimulationData {
 	double * xboun;
 	ITG * ntmat_;
 	double * vold;
+	double * veold;
+	double * accold;
 	double * fn;//values of forces read from calculix
+    double  error_old;
 	double * cocon;
 	ITG * ncocon;
 	ITG * mi;
+    ITG * neq;
 
 	// Interfaces
 	int numPreciceInterfaces;
@@ -124,10 +130,18 @@ typedef struct SimulationData {
 
 	// Coupling data
 	double * coupling_init_v;
+	double * coupling_init_ve;
+	double * coupling_init_acc;
+	double * coupling_init_xforc;
+	double * coupling_init_xload;
 	double coupling_init_theta;
 	double coupling_init_dtheta;
 	double precice_dt;
 	double solver_dt;
+	char filepath[1000];
+    float error_ref;
+    float dt_max;
+    float dt_min;
 
 } SimulationData;
 
@@ -169,6 +183,9 @@ void Precice_Advance( SimulationData * sim );
  */
 bool Precice_IsCouplingOngoing();
 
+double Precice_Calculix_dt_estimate(SimulationData * sim, double *accold);
+
+bool Precice_IsTimeStepComplete();
 /**
  * @brief Returns true if checkpoint must be read
  * @return
@@ -196,14 +213,15 @@ void Precice_FulfilledWriteCheckpoint();
  * @param sim: Structure with CalculiX data
  * @param v: CalculiX array with the temperature and displacement values
  */
-void Precice_ReadIterationCheckpoint( SimulationData * sim, double * v );
+void Precice_ReadIterationCheckpoint( SimulationData * sim, double * v, double * ve, double * acc );
 
+void Precice_Restep( SimulationData * sim, double * v, double * ve, double * acc, double *xforc, double *xload);
 /**
  * @brief Writes iteration checkpoint
  * @param sim: Structure with CalculiX data
  * @param v: CalculiX array with the temperature and displacement values
  */
-void Precice_WriteIterationCheckpoint( SimulationData * sim, double * v );
+void Precice_WriteIterationCheckpoint( SimulationData * sim, double * v, double * ve, double * acc , double *xforc, double* xload);
 
 /**
  * @brief Reads the coupling data for all interfaces
@@ -262,7 +280,7 @@ void PreciceInterface_EnsureValidNodesMeshID( PreciceInterface * interface );
  * @param interface
  * @param sim
  */
-void PreciceInterface_ConfigureTetraFaces( PreciceInterface * interface, SimulationData * sim );
+void PreciceInterface_ConfigureFaces( PreciceInterface * interface, SimulationData * sim );
 
 
 

@@ -37,7 +37,7 @@ enum xloadVariable { DFLUX, FILM_H, FILM_T };
  *  Displacements - dynamics data to be read/written (by the Calculix adapter)
  *  DisplacementDeltas - FSI data to be written (by the Calculix adapter)
  */
-enum CouplingDataType { TEMPERATURE, HEAT_FLUX, CONVECTION, FORCES, DISPLACEMENTS, DISPLACEMENTDELTAS };
+enum CouplingDataType { TEMPERATURE, HEAT_FLUX, CONVECTION, FORCES, DISPLACEMENTS, DISPLACEMENTDELTAS, PRESSURE };
 
 /**
  * @brief Returns node set name with internal CalculiX format
@@ -163,7 +163,14 @@ void getTetraFaceCenters( ITG * elements, ITG * faces, ITG numElements, ITG * ko
  */
 void getTetraFaceNodes( ITG * elements, ITG * faces, ITG * nodes, ITG numElements, ITG numNodes, ITG * kon, ITG * ipkon, int * tetraFaceNodes );
 
+void getShellxloadIndices( ITG * elementIDs,  ITG numElements, ITG nload, ITG * nelemload, char * sideload, ITG * xloadIndices);
+
 void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNodes, ITG * kon, ITG * ipkon,ITG * lakon, int * shellFaceNodes );
+
+void getShellnodeIndices(  ITG * elementIDs, ITG * nodeIDs,ITG  numElements, ITG numNodes, ITG *kon, ITG *ipkon, ITG * lakon, int *pressureNodeIndex );
+
+void setFacePressure( ITG * nodes, double *pressure, ITG numNodes, ITG numElements, int dim,int *xloadIndices, int *pressureNodeIndex, double* xload);
+
 void getSurfaceElements( ITG setID, ITG * ialset, ITG * istartset, ITG * iendset, ITG * elements);
 /**
  * @brief Gets the indices of the xload where the DFLUX and FILM boundary conditions must be applied

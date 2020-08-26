@@ -67,7 +67,7 @@ include $(CCX)/Makefile.inc
 SCCXMAIN = ccx_2.15.c
 
 # Append additional sources
-SCCXC += nonlingeo_precice.c CCXHelpers.c PreciceInterface.c
+SCCXC += nonlingeo_precice.c CCXHelpers.c PreciceInterface.c checkconvergence_precice.c
 SCCXF += getflux.f getkdeltatemp.f
 
 

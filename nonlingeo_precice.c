@@ -126,7 +126,7 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
       j=0,*ifatie=NULL,n,inoelsize=0,isensitivity=0,*istartblk=NULL,
       *iendblk=NULL,*nblket=NULL,*nblkze=NULL,nblk,*konf=NULL,*ielblk=NULL,
       *iwork=NULL,nelt,lrgw,*igwk=NULL,itol,itmax,iter,ierr,iunit,ligw,
-      mei[4]={0,0,0,0},initial;
+      mei[4]={0,0,0,0},initial, restep;
 
   double *stn=NULL,*v=NULL,*een=NULL,cam[5],*epn=NULL,*cg=NULL,
          *cdn=NULL,*vfa=NULL,*pslavsurfold=NULL,
@@ -159,7 +159,7 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
 	 energyref,denergymax,dtcont,dtvol,wavespeed[*nmat],emax,r_abs,
          enetoll,dampwk=0.,dampwkini=0.,temax,*tmp=NULL,energystartstep[4],
 	 sizemaxinc,*adblump=NULL,*adcpy=NULL,*aucpy=NULL,*rwork=NULL,
-	 *sol=NULL,*rgwk=NULL,tol,*sb=NULL,*sx=NULL,delcon,alea;
+	 *sol=NULL,*rgwk=NULL,tol,*sb=NULL,*sx=NULL,delcon,alea,dt;
 
   FILE *f1;
 	 
@@ -223,10 +223,14 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
       .xboun = xboun,
       .ntmat_ = ntmat_,
       .vold = vold,
+      .accold = accold,
+      .veold = veold,
       .fn = fn,
       .cocon = cocon,
       .ncocon = ncocon,
-      .mi = mi
+      .mi = mi,
+      .neq=neq,
+      .error_old=-1
   };
 
   if(*ithermal==4){
@@ -1093,9 +1097,11 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
   while( Precice_IsCouplingOngoing() ){
       
       /* Adapter: Adjust solver time step */
+      //printf("dtheta1 was %e\n", *simulationData.dtheta);
       Precice_AdjustSolverTimestep( &simulationData );
+      //printf("dtheta2 was %e\n", *simulationData.dtheta);
       /* Adapter read coupling data if available */
-      Precice_ReadCouplingData( &simulationData );
+      //Precice_ReadCouplingData( &simulationData );
       
       if(icutb==0){
 	  
@@ -1113,11 +1119,11 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
 	  
 	  memcpy(&vini[0],&vold[0],sizeof(double)*mt**nk);
 
-	  if( Precice_IsWriteCheckpointRequired() )
-      	  {
-          	Precice_WriteIterationCheckpoint( &simulationData, vini );
-          	Precice_FulfilledWriteCheckpoint();
-          }
+	  //if( Precice_IsWriteCheckpointRequired() )
+      //	  {
+      //    	Precice_WriteIterationCheckpoint( &simulationData, vini, veini, accini);
+      //    	Precice_FulfilledWriteCheckpoint();
+      //    }
 	  
 	  for(k=0;k<*nboun;++k){xbounini[k]=xbounact[k];}
 	  if((*ithermal==1)||(*ithermal>=3)){
@@ -1146,6 +1152,28 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
 		  // MPADD end
 	      }
 	  }
+      printf("calling iswritecheckpoint\n");
+	  if( Precice_IsWriteCheckpointRequired() )
+      	  {
+            double vsum=0., vesum=0, accsum=0, fsum=0;
+	        for(k=0;k<mt**nk;++k){
+                vsum+=fabs(vold[k]);
+                vesum+=fabs(veold[k]);
+                accsum+=fabs(accold[k]);
+            }
+            for(k=0;k<*nforc;++k)
+                fsum+=fabs(xforc[k]);
+            
+
+            printf("in the write iteration checkpoint\n");
+            printf("the acc of vold is %f\n", vsum);
+            printf("the acc of veold is %f\n", vesum);
+            printf("the acc of accold is %f\n", accsum );
+            printf("the acc of xforc is %f\n", fsum );
+          	Precice_WriteIterationCheckpoint( &simulationData, vini, veini, accini, xforc, xload);
+          	Precice_FulfilledWriteCheckpoint();
+          }
+	
 	  if(*ithermal!=2){
 	      for(k=0;k<6*mi[0]*ne0;++k){
 		  stiini[k]=sti[k];
@@ -2611,6 +2639,7 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
 	  iflagact=0;
       }
       
+      //printf("AAA dtheta was %e\n", dtheta);
     }
 
     if(*nmethod!=4)SFREE(resold);
@@ -2659,21 +2688,130 @@ void nonlingeo_precice(double **cop, ITG *nk, ITG **konp, ITG **ipkonp, char **l
               islavsurf,ielprop,prop,energyini,energy,&kscale,iponoel,
               inoel,nener,orname,network,ipobody,xbodyact,ibody,typeboun);
 
-	simulationData.fn = fn;
+	    simulationData.fn = fn;
         memcpy(&vold[0],&v[0],sizeof(double)*mt**nk);
+        //printf("dtheta was %e\n", *simulationData.dtheta);
+        double vsum=0., vesum=0, accsum=0; 
+        for(k=0;k<mt**nk;++k){
+            vsum+=fabs(vold[k]);
+            //vesum+=fabs(veold[k]);
+            //accsum+=fabs(accold[k]);
+        }
+        printf("the acc of vold is %f\n", vsum);
+        //printf("the acc of veold is %f\n", vesum);
+        //printf("the acc of accold is %f\n", accsum );
 
         Precice_WriteCouplingData( &simulationData );
         /* Adapter: Advance the coupling */
         Precice_Advance( &simulationData );
         /* Adapter: If the coupling does not converge, read the checkpoint */
+
+      /* Adapter read coupling data if available */
+        Precice_ReadCouplingData( &simulationData );
+       /* Adapter read coupling data if available */
+        //Precice_AdjustSolverTimestep( &simulationData );
+
+        //double dt_calculix= *simulationData.dtheta  *  *simulationData.tper;
+        //printf("dtheta was %e\n", *simulationData.dtheta);
         if( Precice_IsReadCheckpointRequired() )
         {
             if( *nmethod == 4 )
             {
-                Precice_ReadIterationCheckpoint( &simulationData, vold );
+                vsum=0.; vesum=0; accsum=0; 
+	            for(k=0;k<mt**nk;++k){
+                    vsum+=fabs(vold[k]);
+                    vesum+=fabs(veold[k]);
+                    accsum+=fabs(accold[k]);
+                }
+                printf("before the read iteration checkpoint\n");
+                printf("the acc of vold is %f\n", vsum);
+                printf("the acc of veold is %f\n", vesum);
+                printf("the acc of accold is %f\n", accsum );
+                
+                Precice_ReadIterationCheckpoint( &simulationData, vold, veold, accold );
+                vsum=0.; vesum=0; accsum=0; 
+	            for(k=0;k<mt**nk;++k){
+                    vsum+=fabs(vold[k]);
+                    vesum+=fabs(veold[k]);
+                    accsum+=fabs(accold[k]);
+                }
+                printf("after the read iteration checkpoint\n");
+                printf("the acc of vold is %f\n", vsum);
+                printf("the acc of veold is %f\n", vesum);
+                printf("the acc of accold is %f\n", accsum );
+
                 icutb++;
             }
             Precice_FulfilledReadCheckpoint();
+        }
+        else if (Precice_IsTimeStepComplete())
+        {
+            //FILE * file;
+            //const char * temp_filename="~dt_file3.dat";
+            //const char * filename="dt_file3.dat";
+            //dt=(dtheta) * (*tper);
+            //printf("dt is %f", dt);
+            restep=Precice_Calculix_dt_estimate(&simulationData, accold);
+            //restep=0;
+            //printf("new time step was adjusted to %e\n", dt);
+            //if ((file=fopen(temp_filename, "w"))!=NULL)
+            //{
+            //    fprintf(file, "%.9e\n", dt);
+            //}
+            //fclose(file); 
+            //rename(temp_filename, filename);
+            if (restep){
+                double fsum=0;
+                //for(k=0;k<*nforc;++k)
+                //    fsum+=fabs(xforc[k]);
+                //printf("before restep the acc of xforc is %f\n",  fsum);
+                Precice_Restep( &simulationData, vold, veold, accold, xforc, xload );
+                //fsum=0;
+                //for(k=0;k<*nforc;++k)
+                //    fsum+=fabs(xforc[k]);
+                //printf("after restep the acc of xforc is %f\n",  fsum);
+
+                
+              //memcpy(&vold[0],&vini[0],sizeof(double)*mt**nk);
+        
+              for(k=0;k<*nboun;++k){xbounact[k]=xbounini[k];}
+              if((*ithermal==1)||(*ithermal>=3)){
+        	for(k=0;k<*nk;++k){t1act[k]=t1ini[k];}
+              }
+              for(k=0;k<neq[1];++k){
+        	  f[k]=fini[k];
+              }
+              if(*nmethod==4){
+        	//for(k=0;k<mt**nk;++k){
+        	//  veold[k]=veini[k];
+        	//  accold[k]=accini[k];
+        	//}
+        	for(k=0;k<neq[1];++k){
+        //	  f[k]=fini[k];
+        	  fext[k]=fextini[k];
+        	  cv[k]=cvini[k];
+        	}
+              }
+              if(*ithermal!=2){
+        	  for(k=0;k<6*mi[0]*ne0;++k){
+        	      sti[k]=stiini[k];
+        	      eme[k]=emeini[k];
+        	  }
+              }
+              if(*nener==1)
+        	  for(k=0;k<mi[0]*ne0;++k){ener[k]=enerini[k];}
+        
+              for(k=0;k<*nstate_*mi[0]*(ne0+maxprevcontel);++k){
+        	  xstate[k]=xstateini[k];
+              }	  
+        
+              qam[0]=qamold[0];
+              qam[1]=qamold[1];
+              printf("qamold[0] is %f", qamold[0]);
+              printf("qamold[1] is %f", qamold[1]);
+                //icutb++;
+                //time
+            }
         }
 
 		SFREE(v);SFREE(stn);SFREE(stx);SFREE(fn);SFREE(inum);

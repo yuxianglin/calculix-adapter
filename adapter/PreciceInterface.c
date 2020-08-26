@@ -18,6 +18,24 @@ void Precice_Setup( char * configFilename, char * participantName, SimulationDat
 	printf( "Setting up preCICE participant %s, using config file: %s\n", participantName, configFilename );
 	fflush( stdout );
 
+    //FILE *f;
+    //const char * fname="filepath1.dat";
+    ////char  fpath[1000];
+    //while ((f=fopen(fname, "r"))==NULL)
+    //    continue;
+    ////fscanf(f, "%[^\n]",sim->filepath);
+    //float A;
+    //char filepath[1000];
+    //fscanf(f, "%s\n",filepath);
+    //fscanf(f, "%f\n",&A);
+    //printf("The filepath is %s\n", filepath);
+    //printf("The error reference is %f\n",A);
+    //fscanf(f, "%f\n",&A);
+    //printf("The max dt is %f\n",A);
+
+    //fscanf(f, "%f",&(sim->dt_max));
+    //fscanf(f, "%f",&(sim->dt_min));
+
 	int i;
 	char * preciceConfigFilename;
 	InterfaceConfig * interfaces;
@@ -41,12 +59,36 @@ void Precice_Setup( char * configFilename, char * participantName, SimulationDat
 	// Initialize variables needed for the coupling
 	NNEW( sim->coupling_init_v, double, sim->mt * sim->nk );
 
+	NNEW( sim->coupling_init_ve, double, sim->mt * sim->nk );
+	NNEW( sim->coupling_init_acc, double, sim->mt * sim->nk );
+	NNEW( sim->coupling_init_xforc, double, sim->nforc );
+	NNEW( sim->coupling_init_xload, double, sim->nload );
+
+
 	// Initialize preCICE
 	sim->precice_dt = precicec_initialize();
 
 	// Initialize coupling data
 	Precice_InitializeData( sim );
-
+    
+    FILE *f;
+    const char * fname="filepath.dat";
+    printf("I am here\n ");
+    while ((f=fopen(fname, "r"))==NULL)
+        continue;
+    fscanf(f, "%[^\n]",sim->filepath);
+    fscanf(f, "%e",&(sim->error_ref));
+    fscanf(f, "%e",&(sim->dt_max));
+    fscanf(f, "%e",&(sim->dt_min));
+    printf("The filepath is %s \n", sim->filepath);
+    printf("The error reference is %e \n",sim->error_ref);
+    printf("The max dt is %e \n", sim->dt_max);
+    printf("The min dt is %e \n", sim->dt_min);
+    fclose(f);
+    //sim->error_ref=1E-4;
+    //sim->dt_max=1E-3;
+    //sim->dt_min=1E-5;
+    remove(fname);
 }
 
 void Precice_InitializeData( SimulationData * sim )
@@ -101,6 +143,11 @@ bool Precice_IsCouplingOngoing()
 	return precicec_isCouplingOngoing();
 }
 
+bool Precice_IsTimeStepComplete()
+{
+    return precicec_isCouplingTimestepComplete();
+}
+
 bool Precice_IsReadCheckpointRequired()
 {
 	return precicec_isActionRequired( "read-iteration-checkpoint" );
@@ -121,7 +168,153 @@ void Precice_FulfilledWriteCheckpoint()
 	precicec_fulfilledAction( "write-iteration-checkpoint" );
 }
 
-void Precice_ReadIterationCheckpoint( SimulationData * sim, double * v )
+double Precice_Calculix_dt_estimate(SimulationData * sim, double *accold)
+{
+    double error=0.;
+    double dt;
+    double dt_max=sim->dt_max;
+    double dt_min=sim->dt_min;
+    double error_ref=sim->error_ref;
+    int restep;
+    int N=sim->mt*sim->nk;
+    float accsum=0; 
+	for(int k=0;k<N;++k){
+        accsum+=fabs(accold[k]);
+    }
+    printf("In estimate\n");
+    printf("the acc of accold is %f\n", accsum );
+    accsum=0.;
+	for(int k=0;k<N;++k){
+        accsum+=fabs(sim->coupling_init_acc[k]);
+    }
+    printf("the acc of init acc is %f\n", accsum );
+
+
+    for (int k=0; k<N; ++k)
+        error+=(sim->coupling_init_acc[k]-accold[k])*(sim->coupling_init_acc[k]-accold[k]);
+    //error/=N;
+    //error*=14400;
+    //double dt_calculix= *sim->dtheta  *  *sim->tper;
+    //printf("The acceleration rms is  %e\n", sqrt(error));
+    printf("The number of nodes is %d\n", N);
+    error=1./6*sqrt(error)*sim->solver_dt*sim->solver_dt;
+    printf("The error norm is %e\n", error);
+    printf("The ref error is %e\n", error_ref);
+    if (error>1E-10)
+    {
+        double ratio=0.8*error_ref/error;
+        double ratio1=error_ref/error;
+        double incre;
+        double incre1;
+        if (sim->error_old<=0){
+            incre=pow(ratio, 1./15);
+            incre1=pow(ratio, 1./3);
+        }
+        else{
+            incre=pow(ratio, 1./15) ;//*pow(sim->error_old/error, 1./15);
+            incre1=pow(ratio, 1./3);//*pow(sim->error_old/error, 0.1);
+            
+        }
+        if (ratio1>1.)
+        {
+            double dt_trial=2*incre/(incre + 1)*sim->solver_dt;
+            //double dt_trial=(0.7+0.3*incre)*sim->solver_dt;
+            *(sim->dtheta)= fmax(fmin(dt_trial, dt_max), dt_min)/ *sim->tper;
+            dt=(*sim->dtheta) * (*sim->tper); 
+            restep=0;
+            printf("The error old norm is %e\n", sim->error_old);
+            sim->error_old=error;
+
+        }
+        else
+        {
+            printf("The error is too large, considering retake step\n");
+             
+            //double dt_trial=(0.7+0.3*incre)*sim->solver_dt;
+            double dt_trial=incre1*sim->solver_dt;
+            *sim->dtheta= fmax(fmin(dt_trial, dt_max), dt_min)/ *sim->tper;
+            dt=(*sim->dtheta) * (*sim->tper); 
+            if (ratio1 >0.5)
+                restep=0;
+            else 
+                restep=1;
+            
+            if (dt<1.001*dt_min)
+                restep=0;
+        
+
+            //double dt_trial=2*incre1/(incre1 + 1)*sim->solver_dt;
+            //double dt_trial=incre1*sim->solver_dt;
+            //*sim->dtheta= fmax(fmin(dt_trial, dt_max), dt_min)/ *sim->tper;
+            //dt=(*sim->dtheta) * (*sim->tper); 
+        }
+    }
+    printf("old time step was %.8e\n",sim->solver_dt);
+    printf("max time step was %.8e\n",dt_max);
+    printf("min time step was %.8e\n",dt_min);
+    printf("The time step size is adjusted to %.9e\n", dt);
+    if (restep==0){
+        FILE * file1;
+        char  filename1[1000];
+        strcpy(filename1, sim->filepath);
+        strcat(filename1, "/error.txt");
+        if ((file1=fopen(filename1, "a"))!=NULL)
+            fprintf(file1, "%.9e\n", error);
+        fclose(file1); 
+        FILE * file2;
+        char  filename2[1000];
+        strcpy(filename2, sim->filepath);
+        strcat(filename2, "/dt_history.txt");
+        if ((file2=fopen(filename2, "a"))!=NULL)
+            fprintf(file2, "%.9e\n", dt);
+        fclose(file2); 
+
+    }
+    FILE * file;
+    
+    char  temp_filename[1000];
+    char  filename[1000];
+
+    printf("The filepath is %s\n",sim->filepath);
+    strcpy(temp_filename, sim->filepath);
+    strcpy(filename, sim->filepath);
+    strcat(temp_filename, "/~dt_file.dat");
+    strcat(filename, "/dt_file.dat");
+
+    //printf("The temp is %s\n",temp_filename);
+    printf("The file is %s\n", filename);
+    if ((file=fopen(temp_filename, "w"))!=NULL)
+    {
+        fprintf(file, "%.9e\n", dt);
+        fprintf(file, "%d\n", restep);
+    }
+    fclose(file); 
+    rename(temp_filename, filename);
+
+    return restep;
+
+}
+
+void Precice_Restep( SimulationData * sim, double * v, double * ve, double * acc, double *xforc, double *xload)
+{
+
+	printf( "Calculix revert...\n" );
+	fflush( stdout );
+
+	// Reload time
+	*( sim->theta ) = sim->coupling_init_theta;
+
+	// Reload step size
+	//*( sim->dtheta ) = sim->coupling_init_dtheta;
+
+	// Reload solution vector v
+	memcpy( v, sim->coupling_init_v, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( ve, sim->coupling_init_ve, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( acc, sim->coupling_init_acc, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( xforc, sim->coupling_init_xforc, sizeof( double ) * sim->nforc );
+	memcpy( xload, sim->coupling_init_xload, sizeof( double ) * sim->nload );
+}
+void Precice_ReadIterationCheckpoint( SimulationData * sim, double * v, double * ve, double * acc)
 {
 
 	printf( "Adapter reading checkpoint...\n" );
@@ -135,9 +328,11 @@ void Precice_ReadIterationCheckpoint( SimulationData * sim, double * v )
 
 	// Reload solution vector v
 	memcpy( v, sim->coupling_init_v, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( ve, sim->coupling_init_ve, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( acc, sim->coupling_init_acc, sizeof( double ) * sim->mt * sim->nk );
 }
 
-void Precice_WriteIterationCheckpoint( SimulationData * sim, double * v )
+void Precice_WriteIterationCheckpoint( SimulationData * sim, double * v, double * ve, double * acc, double *xforc, double *xload)
 {
 
 	printf( "Adapter writing checkpoint...\n" );
@@ -151,6 +346,10 @@ void Precice_WriteIterationCheckpoint( SimulationData * sim, double * v )
 
 	// Save solution vector v
 	memcpy( sim->coupling_init_v, v, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( sim->coupling_init_ve, ve, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( sim->coupling_init_acc, acc, sizeof( double ) * sim->mt * sim->nk );
+	memcpy( sim->coupling_init_xforc, xforc, sizeof( double ) * sim->nforc );
+	memcpy( sim->coupling_init_xload, xload, sizeof( double ) * sim->nload );
 }
 
 void Precice_ReadCouplingData( SimulationData * sim )
@@ -187,11 +386,24 @@ void Precice_ReadCouplingData( SimulationData * sim )
 				precicec_readBlockScalarData( interfaces[i]->kDeltaReadDataID, interfaces[i]->numElements, interfaces[i]->preciceFaceCenterIDs, interfaces[i]->faceCenterData );
 				setFaceHeatTransferCoefficients( interfaces[i]->faceCenterData, interfaces[i]->numElements, interfaces[i]->xloadIndices, sim->xload );
 				break;
-				case FORCES:
+			case FORCES:
 				// Read and set forces as concentrated loads (Neumann BC)
 				precicec_readBlockVectorData( interfaces[i]->forcesDataID, interfaces[i]->numNodes, interfaces[i]->preciceNodeIDs, interfaces[i]->nodeVectorData );
+                //for (int k=0; k<interfaces[i]->numNodes; k++ ) printf("the force is %f", interfaces[i]->nodeVectorData[k]);
+
 				setNodeForces( interfaces[i]->preciceNodeIDs, interfaces[i]->nodeVectorData, interfaces[i]->numNodes, interfaces[i]->dim, interfaces[i]->xforcIndices, sim->xforc);
 				break;
+			case PRESSURE:
+				// Read and set forces as concentrated loads (Neumann BC)
+				precicec_readBlockScalarData( interfaces[i]->pressureDataID, interfaces[i]->numNodes, interfaces[i]->preciceNodeIDs, interfaces[i]->nodeScalarData );
+                //printf("the number of node is %d\n", interfaces[i]->numNodes);
+                //for (int k=0; k<20; k++ )
+                //for (int k=0; k<interfaces[i]->numNodes; k++ )
+                //    printf("the pressure is %f", interfaces[i]->nodeScalarData[k]);
+                
+				setFacePressure( interfaces[i]->preciceNodeIDs,interfaces[i]->nodeScalarData, interfaces[i]->numNodes, interfaces[i]->numElements, interfaces[i]->dim, interfaces[i]->xloadIndices, interfaces[i]->pressureNodeIndex, sim->xload);
+				break;
+
 			case DISPLACEMENTS:
 				// Read and set displacements as single point constraints (Dirichlet BC)
 				precicec_readBlockVectorData( interfaces[i]->displacementsDataID, interfaces[i]->numNodes, interfaces[i]->preciceNodeIDs, interfaces[i]->nodeVectorData );
@@ -337,6 +549,7 @@ void PreciceInterface_Create( PreciceInterface * interface, SimulationData * sim
 	interface->xloadIndices = NULL;
 	interface->xforcIndices = NULL;
 	interface->mapNPType = NULL;
+    interface->pressureNodeIndex= NULL;
 	//Mapping Type
 
 	// The patch identifies the set used as interface in Calculix
@@ -356,7 +569,7 @@ void PreciceInterface_Create( PreciceInterface * interface, SimulationData * sim
 		if ( interface->faceCentersMeshName != NULL) {
 			PreciceInterface_ConfigureFaceCentersMesh( interface, sim );
 		// Triangles of the nodes mesh (needs to be called after the face centers mesh is configured!)
-			PreciceInterface_ConfigureTetraFaces( interface, sim );
+			PreciceInterface_ConfigureFaces( interface, sim );
 		}
 
 	PreciceInterface_ConfigureCouplingData( interface, sim, config );
@@ -366,6 +579,7 @@ void PreciceInterface_Create( PreciceInterface * interface, SimulationData * sim
 void PreciceInterface_ConfigureFaceCentersMesh( PreciceInterface * interface, SimulationData * sim )
 {
 	//printf("Entering ConfigureFaceCentersMesh \n");
+//  if (strcmp1(sim->lakon[0], "C3D4")==0){
 	char * faceSetName = toFaceSetName( interface->name );
 	interface->faceSetID = getSetID( faceSetName, sim->set, sim->nset );
 	interface->numElements = getNumSetElements( interface->faceSetID, sim->istartset, sim->iendset );
@@ -393,11 +607,13 @@ void PreciceInterface_ConfigureNodesMesh( PreciceInterface * interface, Simulati
 	char * nodeSetName = toNodeSetName( interface->name );
 	interface->nodeSetID = getSetID( nodeSetName, sim->set, sim->nset );
 	interface->numNodes = getNumSetElements( interface->nodeSetID, sim->istartset, sim->iendset );
-	//printf("numNodes = %d \n", interface->numNodes);
+	printf("numNodes = %d \n", interface->numNodes);
 	interface->nodeIDs = &sim->ialset[sim->istartset[interface->nodeSetID] - 1]; //Lucia: make a copy
 
 	interface->nodeCoordinates = malloc( interface->numNodes * interface->dim * sizeof( double ) );
 	getNodeCoordinates( interface->nodeIDs, interface->numNodes, interface->dim, sim->co, sim->vold, sim->mt, interface->nodeCoordinates );
+    //for(int k=0; k<interface->numNodes * interface->dim; ++k)
+    //    printf("the coords is %f", interface->nodeCoordinates[k]);
 
 	if( interface->nodesMeshName != NULL )
 	{
@@ -431,13 +647,14 @@ void PreciceInterface_NodeConnectivity( PreciceInterface * interface, Simulation
 	    getSurfaceElementsAndFaces( interface->faceSetID, sim->ialset, sim->istartset, sim->iendset, interface->elementIDs, interface->faceIDs );
 	    interface->numElements = numElements;
 	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
-	    PreciceInterface_ConfigureTetraFaces( interface, sim );
+	    PreciceInterface_ConfigureFaces( interface, sim );
     }
     else if (strcmp1(sim->lakon[0], "C3D20RL")==0)
     {
         char * faceSetName = toElementSetName( interface->name );
 	    interface->faceSetID = getSetID( faceSetName, sim->set, sim->nset );
 	    numElements = getNumSetElements( interface->faceSetID, sim->istartset, sim->iendset );
+        printf("the number of element is %d", numElements);
 	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
 	    interface->elementIDs = malloc( numElements * sizeof( ITG ) );
 	    //interface->faceIDs = malloc( numElements * sizeof( ITG ) );
@@ -445,7 +662,7 @@ void PreciceInterface_NodeConnectivity( PreciceInterface * interface, Simulation
 	    getSurfaceElements( interface->faceSetID, sim->ialset, sim->istartset, sim->iendset, interface->elementIDs);
 	    interface->numElements = numElements;
 	    //interface->triangles = malloc( numElements * 3 * sizeof( ITG ) );
-	    PreciceInterface_ConfigureTetraFaces( interface, sim );
+	    PreciceInterface_ConfigureFaces( interface, sim );
 
     }
 }
@@ -460,7 +677,7 @@ void PreciceInterface_EnsureValidNodesMeshID( PreciceInterface * interface )
 	}
 }
 
-void PreciceInterface_ConfigureTetraFaces( PreciceInterface * interface, SimulationData * sim )
+void PreciceInterface_ConfigureFaces( PreciceInterface * interface, SimulationData * sim )
 {
 	int i;
     int numPatch;
@@ -528,6 +745,26 @@ void PreciceInterface_ConfigureCouplingData( PreciceInterface * interface, Simul
 		{
 			interface->kDeltaReadDataID = precicec_getDataID( config->readDataNames[i], interface->faceCentersMeshID );
 			printf( "Read data '%s' found.\n", config->readDataNames[i] );
+		}
+        else if ( strcmp1( config->readDataNames[i], "Pressure" ) == 0 )
+		{
+            if (strcmp1(sim->lakon[0], "C3D20RL")==0){
+			    PreciceInterface_EnsureValidNodesMeshID( interface );
+			    interface->readData = PRESSURE;
+			    interface->xloadIndices = malloc( interface->numElements *  sizeof( int ) );
+			    interface->pressureNodeIndex= malloc( interface->numNodes *8*  sizeof( int ) );
+			    interface->pressureDataID = precicec_getDataID( config->readDataNames[i], interface->nodesMeshID );
+			    getShellxloadIndices( interface->elementIDs, interface->numElements, sim->nload, sim->nelemload, sim->sideload, interface->xloadIndices );
+			    getShellnodeIndices(  interface->elementIDs, interface->nodeIDs,interface->numElements, interface->numNodes, sim->kon, sim->ipkon, sim->lakon,interface->pressureNodeIndex );
+			    //getXforcIndices( interface->nodeIDs, interface->numNodes, sim->nforc, sim->ikforc, sim->ilforc, interface->xforcIndices );
+			    printf( "Read data '%s' found.\n", config->readDataNames[i] );
+			    break;
+            }
+            else
+            {
+                printf("Only configure pressure for S8R element");
+                exit( EXIT_FAILURE );
+            }
 		}
 		else if ( strcmp1( config->readDataNames[i], "Forces" + i ) == 0 )
 		{

@@ -88,12 +88,6 @@ void getSurfaceElementsAndFaces( ITG setID, ITG * ialset, ITG * istartset, ITG *
 	{
 		elements[k] = ialset[i] / 10;
 		faces[k] = ialset[i] % 10;
-        //printf("the istartset is %i\n",istartset[setID]);
-        //printf("the iendset is %i\n",iendset[setID]);
-        //printf("the ialset is %i\n",ialset[i]);
-        //printf("the element is %i\n", elements[k]);
-        //printf("the face is %i\n", faces[k]);
-        //printf("the k is %i\n", k);
 		k++;
 	}
 }
@@ -109,8 +103,8 @@ void getNodeCoordinates( ITG * nodes, ITG numNodes, int dim, double * co, double
 		//The displacements are added to the coordinates such that in case of a simulation restart the displaced coordinates are used for initializing the coupling interface instead of the initial coordinates
 		for( j = 0 ; j < dim ; j++ ){
             coordinates[i * dim + j] = co[nodeIdx * 3 + j] + v[nodeIdx * mt + j + 1];
-            //printf("dimension: %i, #node: %i, direction: %i coordinate: %f\n", dim, i, j, coordinates[i * dim + j]);
         }
+        //printf("dimension: %i, #node: %i, coordinate: %f, %f, %f\n", dim, i, coordinates[i * dim +0],coordinates[i * dim + 1],coordinates[i * dim + 2]);
 	}
 }
 
@@ -179,7 +173,51 @@ void getNodeDisplacementDeltas( ITG * nodes, ITG numNodes, int dim, double * v, 
 
    }
  */
-
+//void getShellFaceCenters( ITG * elements,  ITG numElements, ITG * kon, ITG * ipkon, double * co, double * faceCenters, ITG * preciceFaceCenterIDs )
+//{
+//
+//	// Assume all tetra elements -- maybe implement checking later...
+//
+//	// Node numbering for faces of tetrahedral elements (in the documentation the number is + 1)
+//	// Numbering is the same for first and second order elements
+//	//int faceNodes[4][3] = { { 0,1,2 }, { 0,3,1 }, { 1,3,2 }, { 2,3,0 } };
+//	int faceindex[1][4] = { { 0,1,2,3 }};
+//
+//	ITG i, j;
+//    ITG offset;
+//    if (strcmp1(lakon[0], "C3D20RL")==0){
+//        offset=20;
+//    }
+//
+//	for( i = 0 ; i < numElements ; i++ )
+//	{
+//
+//		//ITG faceIdx = faces[i] - 1;
+//		ITG elementIdx =i;// elements[i] - 1;
+//		double x = 0, y = 0, z = 0;
+//
+//		for( j = 0 ; j < 4 ; j++ )
+//		{
+//			//ITG nodeNum = faceNodes[faceIdx][j];
+//			//ITG nodeID = kon[ipkon[elementIdx] + nodeNum];
+//			//ITG nodeIdx = ( nodeID - 1 ) * 3;
+//			ITG nodeID = kon[ipkon[elementIdx]+offset+faceindex[1][j]];
+//			ITG nodeIdx = ( nodeID - 1 ) * 3;
+//			// The nodeIdx is already multiplied by 3, therefore it must be divided by 3 ONLY when checking if coordinates match getNodeCoordinates
+//
+//			x += co[nodeIdx + 0];
+//			y += co[nodeIdx + 1];
+//			z += co[nodeIdx + 2];
+//
+//		}
+//		faceCenters[i * 3 + 0] = x / 4;
+//		faceCenters[i * 3 + 1] = y / 4;
+//		faceCenters[i * 3 + 2] = z / 4;
+//
+//	}
+//
+//	
+//}
 void getTetraFaceCenters( ITG * elements, ITG * faces, ITG numElements, ITG * kon, ITG * ipkon, double * co, double * faceCenters, ITG * preciceFaceCenterIDs )
 {
 
@@ -242,8 +280,10 @@ void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNod
 	ITG i, j, k;
     ITG numPatch;	
     ITG offset;	
+    ITG nodeID;
     //int **faceindex;
-	int faceindex[6][3] = { { 0,4,7 }, { 1,4,5 }, { 2,5,6 }, { 3,6,7 } , { 4,5,7 }, { 5,6,7 }};
+	int faceindexodd[6][3] = { { 0,4,7 }, { 1,4,5 }, { 2,5,6 }, { 3,6,7 } , { 4,5,7 }, { 5,6,7 }};
+	int faceindexeven[6][3] = { { 0,4,7 }, { 1,4,5 }, { 2,5,6 }, { 3,6,7 } , { 4,6,7 }, { 5,6,4 }};
 
         
     if (strcmp1(lakon[0], "C3D20RL")==0){
@@ -256,9 +296,12 @@ void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNod
 	//    //int index[2][3]= { { 0,1,2 }, { 2,3,0 }};
     //    //faceindex=index;
     //}
-    else
+    else{
        //TODO add an error reason
+        printf("Only configure for shell S8R element\n");
         exit( EXIT_FAILURE );
+    }
+    //printf("I have finished the node connect\n");
 	for( i = 0 ; i < numPatch*numElements ; i++ )
 	{
         ITG elementIdx = i/numPatch;
@@ -267,7 +310,12 @@ void getShellFaceNodes( ITG * elements, ITG * nodes, ITG numElements, ITG numNod
 		{
             //printf("i=%i, j=%i, localpatch=%i\n",i, j, localPatch);        
             //printf("faceidex[i, j]=%i\n",faceindex[localPatch][j]);        
-			ITG nodeID = kon[ipkon[elementIdx]+offset+faceindex[localPatch][j]];
+            if (elementIdx%2==0){
+			    nodeID = kon[ipkon[elementIdx]+offset+faceindexodd[localPatch][j]];//nodeID is calculix id
+            }
+            else{
+			    nodeID = kon[ipkon[elementIdx]+offset+faceindexeven[localPatch][j]];//nodeID is calculix id
+            }
 			//ITG nodeID = kon[ipkon[elementIdx]+offset+*faceindex[localPatch*3+j]];
             //TODO
 			for( k = 0 ; k < numNodes ; k++ )
@@ -318,7 +366,73 @@ void getTetraFaceNodes( ITG * elements, ITG * faces, ITG * nodes, ITG numElement
 		}
 	}
 }
+void getShellnodeIndices(  ITG * elements, ITG * nodes,ITG  numElements, ITG numNodes, ITG *kon, ITG *ipkon, ITG * lakon, int *pressureNodeIndex )
+{
+	ITG i, j, k;
+    ITG offset=20;
+	for( i = 0 ; i < numElements ; i++ )
+    {
+		for( j = 0 ; j < 8; j++ )
+        {
+			ITG nodeID = kon[ipkon[i]+offset+j];//nodeID is calculix id
+			for( k = 0 ; k < numNodes ; k++ )
+			{
+				if( nodes[k] == nodeID ){
+					pressureNodeIndex[8*i+j] = k;
+                    //printf("element is %d, nodeidx is %d, k is %d\n", i, j, k);
+                }
+			}
 
+        }
+    }
+}
+
+void getShellxloadIndices( ITG * elementIDs,  ITG numElements, ITG nload, ITG * nelemload, char * sideload, ITG * xloadIndices )
+{
+
+	ITG i, k;
+	int nameLength = 20;
+	char faceLabel[] = { 'P', '1', '\0' };
+
+    printf("# of element is %d\n", numElements);
+	for( k = 0 ; k < numElements ; k++ )
+	{
+
+		ITG elementID = elementIDs[k];
+		int found = 0;
+        //printf("nload is %d\n", nload);
+		for( i = 0 ; i < nload ; i++ )
+		{
+            //printf("k=%d\n ", k);
+            //printf("i=%d\n ", i);
+            //printf("%s\n", &sideload[i*nameLength]);
+            //printf("the elementID is %d\n  ", elementID);
+            //printf("the current elementID is %d\n  ", nelemload[i * 2]);
+            //printf("the xload is %f\n      ", xload[i*2]);
+            //printf("\n");
+			if( elementID == nelemload[i * 2] && strcmp1( &sideload[i * nameLength], faceLabel ) == 0 )
+			{
+                
+				xloadIndices[k] = 2 * i;
+                //printf("load index %d is %d\n", k, 2*i);
+				found = 1;
+				break;
+			}
+		}
+
+	   	// xload index not found:
+        //printf("found is %d\n", found);
+		if( !found )
+		{
+            printf("face not found!\n");
+            printf("make sure that your dload file and msh file are consistent\n");
+            exit( EXIT_FAILURE );
+		}
+	}
+    //for( k = 0 ; k < numElements ; k++ )
+    //    printf("xloadindex is %d", xloadIndices[k]);
+
+}
 void getXloadIndices( char * loadType, ITG * elementIDs, ITG * faceIDs, ITG numElements, ITG nload, ITG * nelemload, char * sideload, ITG * xloadIndices )
 {
 
@@ -489,11 +603,30 @@ void setXload( double * xload, int * xloadIndices, double * values, int numValue
 
 	for( i = 0 ; i < numValues ; i++ )
 	{
-		double temp = xload[xloadIndices[i] + indexOffset];
 		xload[xloadIndices[i] + indexOffset] = values[i];
 	}
 }
+void setFacePressure( ITG * nodes, double *pressure, ITG numNodes, ITG numElements, int dim,int *xloadIndices, int *pressureNodeIndex, double* xload)
+{
+    
+	ITG i, k, ind;
+    double pressure_sum;
+	for( k = 0 ; k < numElements ; k++ )
+    {
+        pressure_sum=0;
+        for (i=0; i<8; i++){
+            ind=nodes[pressureNodeIndex[k*8+i]];
+            pressure_sum+=pressure[ind];
 
+        }
+        xload[xloadIndices[k]]=pressure_sum/8.;
+        //printf("element %d which is index %d in xloadIndices is set to %f\n", k, xloadIndices[k], pressure_sum/8.);
+    }
+
+
+
+    
+}
 void setFaceFluxes( double * fluxes, int numFaces, int * xloadIndices, double * xload )
 {
 	setXload( xload, xloadIndices, fluxes, numFaces, DFLUX );
